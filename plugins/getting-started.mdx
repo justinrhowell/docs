@@ -1,0 +1,501 @@
+---
+title: Getting Started with Plugins
+description: "Create your first Nexus AI plugin in minutes"
+---
+
+# Getting Started with Plugins
+
+This guide will walk you through creating your first Nexus AI plugin from scratch. We'll build a simple tool plugin that demonstrates the core concepts and gets you familiar with the development workflow.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- **Python 3.8+** installed
+- **Nexus AI** core system installed and running
+- Basic understanding of Python async/await patterns
+
+## Installation
+
+First, install the Nexus AI plugin development tools:
+
+```bash
+pip install nexus-ai[plugins]
+```
+
+This installs the core system plus plugin development utilities.
+
+## Create Your First Plugin
+
+### 1. Generate Plugin Template
+
+Use the built-in template generator to create a new plugin:
+
+```bash
+# Create a new tool plugin
+nexus-plugin create hello-world --type tool
+
+# Navigate to the plugin directory
+cd plugins/hello-world
+```
+
+This creates the following structure:
+
+```
+hello-world/
+├── plugin.yaml          # Plugin manifest
+├── main.py              # Main implementation
+├── __init__.py          # Package initialization
+├── requirements.txt     # Dependencies (if needed)
+└── README.md           # Documentation
+```
+
+### 2. Plugin Manifest
+
+The `plugin.yaml` file defines your plugin's metadata and requirements:
+
+```yaml
+# Plugin identification
+name: "hello-world"
+version: "1.0.0"
+description: "A simple greeting plugin demonstrating basic functionality"
+author: "Your Name"
+plugin_type: "tool"
+
+# Plugin capabilities
+provides:
+  - "greeting"
+  - "personalization"
+
+# Required permissions
+permissions:
+  - "core.api"
+
+# Entry point
+entry_points:
+  main: "main:HelloWorldPlugin"
+
+# Compatibility
+python_requires: ">=3.8"
+nexus_version: ">=1.0.0"
+license: "MIT"
+```
+
+### 3. Plugin Implementation
+
+Here's the main plugin implementation in `main.py`:
+
+```python
+"""
+Hello World Plugin - A simple tool plugin for Nexus AI.
+"""
+
+import asyncio
+from typing import Dict, List, Any, Optional
+from nexus.plugins.base import ToolPlugin, PluginMetadata
+
+
+class HelloWorldPlugin(ToolPlugin):
+    """
+    A simple tool plugin that provides greeting functionality.
+    """
+    
+    def __init__(self, metadata: PluginMetadata):
+        super().__init__(metadata)
+        self.greeting_count = 0
+    
+    async def load(self, config: Optional[Dict[str, Any]] = None) -> bool:
+        """Load and initialize the plugin."""
+        try:
+            self.config = config or {}
+            self.default_greeting = self.config.get("greeting", "Hello")
+            self.is_loaded = True
+            self.log_info("Hello World plugin loaded successfully")
+            return True
+        except Exception as e:
+            self.log_error(f"Load failed: {e}")
+            return False
+    
+    async def unload(self) -> bool:
+        """Unload and cleanup the plugin."""
+        try:
+            self.log_info(f"Plugin served {self.greeting_count} greetings")
+            self.is_loaded = False
+            return True
+        except Exception as e:
+            self.log_error(f"Unload failed: {e}")
+            return False
+    
+    async def activate(self) -> bool:
+        """Activate the plugin for use."""
+        try:
+            self.log_info("Hello World plugin activated and ready")
+            return True
+        except Exception as e:
+            self.log_error(f"Activation failed: {e}")
+            return False
+    
+    async def deactivate(self) -> bool:
+        """Deactivate the plugin."""
+        try:
+            self.log_info("Hello World plugin deactivated")
+            return True
+        except Exception as e:
+            self.log_error(f"Deactivation failed: {e}")
+            return False
+    
+    def get_capabilities(self) -> List[str]:
+        """Get list of capabilities provided by this plugin."""
+        return ["greeting", "personalization", "counting"]
+    
+    async def health_check(self) -> Dict[str, Any]:
+        """Perform health check on the plugin."""
+        return {
+            "status": "healthy",
+            "details": {
+                "loaded": self.is_loaded,
+                "active": self.is_active,
+                "greetings_served": self.greeting_count,
+                "default_greeting": self.default_greeting
+            }
+        }
+    
+    # Tool-specific methods
+    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a tool with given parameters."""
+        
+        if tool_name == "greet":
+            return await self._handle_greet(parameters)
+        elif tool_name == "personalized_greet":
+            return await self._handle_personalized_greet(parameters)
+        elif tool_name == "get_stats":
+            return await self._handle_get_stats(parameters)
+        
+        return {
+            "success": False,
+            "error": f"Unknown tool: {tool_name}",
+            "available_tools": self.list_tools()
+        }
+    
+    async def _handle_greet(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle basic greeting."""
+        name = parameters.get("name", "World")
+        greeting = parameters.get("greeting", self.default_greeting)
+        
+        self.greeting_count += 1
+        message = f"{greeting}, {name}!"
+        
+        self.log_info(f"Generated greeting: {message}")
+        
+        return {
+            "success": True,
+            "result": message,
+            "metadata": {
+                "tool": "greet",
+                "plugin": self.metadata.name,
+                "greeting_number": self.greeting_count
+            }
+        }
+    
+    async def _handle_personalized_greet(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle personalized greeting with time of day."""
+        import datetime
+        
+        name = parameters.get("name", "Friend")
+        current_hour = datetime.datetime.now().hour
+        
+        if current_hour < 12:
+            time_greeting = "Good morning"
+        elif current_hour < 17:
+            time_greeting = "Good afternoon"
+        else:
+            time_greeting = "Good evening"
+        
+        self.greeting_count += 1
+        message = f"{time_greeting}, {name}! Hope you're having a great day."
+        
+        return {
+            "success": True,
+            "result": message,
+            "metadata": {
+                "tool": "personalized_greet",
+                "time_of_day": time_greeting,
+                "greeting_number": self.greeting_count
+            }
+        }
+    
+    async def _handle_get_stats(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Get plugin statistics."""
+        return {
+            "success": True,
+            "result": {
+                "total_greetings": self.greeting_count,
+                "plugin_status": "active" if self.is_active else "inactive",
+                "default_greeting": self.default_greeting,
+                "capabilities": self.get_capabilities()
+            },
+            "metadata": {
+                "tool": "get_stats"
+            }
+        }
+    
+    def get_tool_schema(self, tool_name: str) -> Optional[Dict[str, Any]]:
+        """Get schema for a specific tool."""
+        schemas = {
+            "greet": {
+                "name": "greet",
+                "description": "Generate a simple greeting message",
+                "parameters": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name to greet",
+                        "default": "World"
+                    },
+                    "greeting": {
+                        "type": "string", 
+                        "description": "Greeting word to use",
+                        "default": "Hello"
+                    }
+                },
+                "returns": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "result": {"type": "string"},
+                        "metadata": {"type": "object"}
+                    }
+                }
+            },
+            "personalized_greet": {
+                "name": "personalized_greet",
+                "description": "Generate a time-aware personalized greeting",
+                "parameters": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name to greet",
+                        "default": "Friend"
+                    }
+                },
+                "returns": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "result": {"type": "string"},
+                        "metadata": {"type": "object"}
+                    }
+                }
+            },
+            "get_stats": {
+                "name": "get_stats", 
+                "description": "Get plugin usage statistics",
+                "parameters": {},
+                "returns": {
+                    "type": "object",
+                    "properties": {
+                        "success": {"type": "boolean"},
+                        "result": {"type": "object"},
+                        "metadata": {"type": "object"}
+                    }
+                }
+            }
+        }
+        
+        return schemas.get(tool_name)
+    
+    def list_tools(self) -> List[str]:
+        """List all available tools."""
+        return ["greet", "personalized_greet", "get_stats"]
+```
+
+## Testing Your Plugin
+
+### 1. Validate Plugin Structure
+
+First, validate that your plugin is properly structured:
+
+```bash
+nexus-plugin validate ./
+```
+
+This checks:
+- Plugin manifest format
+- Required files presence
+- Python syntax
+- Security scanning
+- Dependency validation
+
+### 2. Test Installation
+
+Test installing your plugin locally:
+
+```bash
+nexus-plugin install . --dev
+```
+
+The `--dev` flag installs in development mode for easier testing.
+
+### 3. Interactive Testing
+
+Test your plugin interactively:
+
+```python
+# test_plugin.py
+import asyncio
+from nexus.plugins.manager import PluginManager
+
+async def test_plugin():
+    # Initialize plugin manager
+    manager = PluginManager()
+    await manager.initialize()
+    
+    # Load your plugin
+    result = await manager.load_plugin("hello-world")
+    print(f"Load result: {result}")
+    
+    # Activate plugin
+    result = await manager.activate_plugin("hello-world")
+    print(f"Activate result: {result}")
+    
+    # Get plugin instance
+    plugin = manager.get_plugin("hello-world")
+    
+    # Test health check
+    health = await plugin.health_check()
+    print(f"Health: {health}")
+    
+    # Test tools
+    greeting = await plugin.execute_tool("greet", {"name": "Alice"})
+    print(f"Greeting: {greeting}")
+    
+    personalized = await plugin.execute_tool("personalized_greet", {"name": "Bob"})
+    print(f"Personalized: {personalized}")
+    
+    stats = await plugin.execute_tool("get_stats", {})
+    print(f"Stats: {stats}")
+
+# Run the test
+asyncio.run(test_plugin())
+```
+
+## Using the Plugin System Test Script
+
+Use the comprehensive test script to validate the entire plugin system:
+
+```bash
+cd /path/to/nexus-ai
+python test_plugin_system.py
+```
+
+This script will:
+1. Install your plugin
+2. Load and activate it
+3. Test all functionality
+4. Start any GUI interfaces
+5. Report comprehensive results
+
+## Plugin Configuration
+
+You can configure your plugin through the plugin manager:
+
+```python
+# Example configuration
+config = {
+    "greeting": "Howdy",           # Custom default greeting
+    "log_level": "DEBUG",          # Enable debug logging
+    "max_greetings": 1000         # Limit total greetings
+}
+
+await manager.load_plugin("hello-world", config=config)
+```
+
+## Next Steps
+
+Now that you have a working plugin, explore more advanced features:
+
+<CardGroup cols={2}>
+  <Card title="Plugin Types" icon="puzzle-piece" href="/plugins/types">
+    Learn about different plugin types and their capabilities
+  </Card>
+  <Card title="Plugin API" icon="code" href="/plugins/api/introduction">
+    Explore the full API for communicating with Nexus core
+  </Card>
+  <Card title="Security Guidelines" icon="shield" href="/plugins/security">
+    Build secure plugins with proper permission handling
+  </Card>
+  <Card title="GUI Plugins" icon="desktop" href="/plugins/examples/gui-dashboard">
+    Create rich user interfaces with the GUI plugin system
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Common Issues
+
+**Plugin Not Loading**
+```bash
+# Check plugin validation
+nexus-plugin validate ./
+
+# Verify manifest format
+cat plugin.yaml
+
+# Check Python syntax
+python -m py_compile main.py
+```
+
+**Permission Errors**
+```yaml
+# Make sure you have required permissions in plugin.yaml
+permissions:
+  - "core.api"        # Required for basic API access
+  - "agents.list"     # If you need to list agents
+  - "tasks.create"    # If you need to create tasks
+```
+
+**Import Errors**
+```python
+# Check your imports in main.py
+from nexus.plugins.base import ToolPlugin, PluginMetadata
+
+# Verify entry point in plugin.yaml matches your class name
+entry_points:
+  main: "main:HelloWorldPlugin"  # module:class_name
+```
+
+### Debug Mode
+
+Enable debug logging for detailed information:
+
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# In your plugin
+self.log_debug("Debug information here")
+```
+
+## Distribution
+
+When you're ready to share your plugin:
+
+1. **Package for Distribution**
+```bash
+nexus-plugin package ./
+```
+
+2. **Publish to Registry** (when available)
+```bash
+nexus-plugin publish ./
+```
+
+3. **Share Locally**
+```bash
+# Others can install from your directory
+nexus-plugin install /path/to/your/plugin
+```
+
+<Warning>
+Always test your plugins thoroughly and follow security best practices before distributing them to others.
+</Warning>
+
+Congratulations! You've created your first Nexus AI plugin. The plugin system is designed to be both powerful and safe, enabling you to extend Nexus AI with rich functionality while maintaining security and performance.
